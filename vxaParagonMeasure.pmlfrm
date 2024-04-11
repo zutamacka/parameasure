@@ -1,0 +1,575 @@
+-------------------------------------------------------------------
+--
+--  Copyright 2024 to current year. Vertex BS d.o.o. All rights reserved in original code.
+--
+--  File:            <vxaParagonMeasure.pmlfrm>
+--  Author:          <AUTHOR @>
+--  Created:         04.04.2024
+--
+--  Description:     < Toolbox for Paragon ; measures stuffs etc >
+--
+-----------------------------------------------------------------------------------------------------
+import 'GridControl'
+handle (1000,0)
+endhandle
+-- pml reload form !!vxaParagonMeasure
+--show !!vxaParagonMeasure
+setup form !!vxaParagonMeasure size 18 5 resizable
+
+	!this.formTitle      = |PMv0|
+	!this.initCall       = |!this.init()|
+	!this.quitCall       = |!this.exit()|
+
+	--frame .tab  TABSET  at x 0 ymin anchor T+L+B+R width 14
+		para .parCate at xmin ymin text '' wid 23
+
+		frame .tabMeasureTab1 'Measure' at xmin ymax  anchor T+L width 23
+
+				button .mPointPos  'P-Point Position'   Callback '!this.pickPPosition('   at xmin + 3.5 ymin width 14
+				button .mPTointPos 'P-Points Distance'  Callback '!this.pickPPosition('   at xmin ymax width 14
+		
+				--button .mDistance   'Distance' 	Callback '!this.pickPosition(' 	at xmin ymax  width 6
+				button .mShow  toggle  '  Show Central Axes' 	Callback '!this.centralAxes(' 		at xmin ymax + 0.5  width 14
+				button .mClearAids  'Clear' 	Callback '!this.clearAids()' 		at xmin ymax + 0.5  width 14
+				--button .mInfo  		'Info' 		Callback '!this.info()' 		at xmin ymax + 0.5  width 6
+		exit
+	--exit
+
+	member .vxAid is REAL
+	member .form is FORM
+	member .view is GADGET
+	member .views is ARRAY
+exit
+
+---------------------------------------------------------------------
+--
+--  Method:      Constructor
+--
+--  Description: Constructor method
+--
+---------------------------------------------------------------------
+define method .vxaParagonMeasure()
+endmethod
+
+-- INITIALIZATIONS
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .init
+--
+-- Description: Initialisation Method
+--
+-----------------------------------------------------------------------------------------------------
+define method .init()
+
+	-- !!AppMathLib 	= object AppMathLib()
+	pml reload form !!edgPlineFilter
+	pml reload form !!edgPointFilter
+	pml reload form !!edgElementFilter
+
+	if(undefined(!!edgCntrl)) then
+		!edgCntrl = object EDGCNTRL()
+		!edgCntrl.globalInstance()
+	endif
+
+	if(undefined(!!edgTypes)) then
+		!edgTypes = object EDGTYPES()
+		!edgTypes.globalInstance()
+	endif
+	!this.vxAid = !!aidNumbers.add ('VTX.PARAGON.MEASURE.AIDS')
+	!this.views = array()
+	!this.view = object GADGET()
+	!this.form = object FORM()
+	!this.parCate.val = 'No View Selected.'
+endmethod
+
+
+-- 	FUNCTIONAL METHODS
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .pointPPosition()
+-- 
+-- Description: Standard Method
+-- 
+--				picks P-Points and displays either P-Point position or
+--					measure of distance between two PPoints
+--
+-----------------------------------------------------------------------------------------------------
+define method .setView() is BOOLEAN
+	
+	!forms 		= !!catModelViews.modelViews
+
+	if !forms.unset() then 
+		!!alert.message('No model views open!')
+		return FALSE
+	endif
+
+	!this.form = !forms.first()
+	!this.view = !this.form.view
+
+	!this.views.append(!this.view)
+
+	!name = !this.form.formTitle
+	!name = !name.replace('Model View:', 'View:')
+	!this.parCate.val = !name
+
+	!!EDGCntrl.escape()
+
+	!this.view.showaxes = TRUE
+
+	!!EDGCntrl.default()
+	!!EDGCntrl.addView(!this.view)
+
+	!this.view.background = 'green'
+	!!edgPosCntrl.setActive(TRUE)
+	return TRUE
+endmethod
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .centralAxes(!gadget is GADGET, !action is STRING)
+-- 
+-- Description: Standard Method
+-- 
+--				toggles standard axes display
+--
+-----------------------------------------------------------------------------------------------------
+define method .centralAxes(!gadget is GADGET, !action is STRING)
+
+	if !action eq 'SELECT' then
+		AXES AT N0 E0 U0 HEIGHT 60
+	else 
+		AXES OFF
+	endif 
+
+endmethod 
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      ..clearAids()
+-- 
+-- Description: Standard Method
+-- 
+--				clears assigned aids
+--
+-----------------------------------------------------------------------------------------------------
+define method .clearAids()
+	aid clear all $!this.vxAid
+endmethod
+
+
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .pointPPosition()
+-- 
+-- Description: Standard Method
+-- 
+--				picks P-Points and displays either P-Point position or
+--					measure of distance between two PPoints
+--
+-----------------------------------------------------------------------------------------------------
+define method .pickPPosition(!gadget is GADGET, !action is STRING)
+
+	if !this.setView() then 
+
+		!tag = !gadget.tag.upCase() 
+
+		if !tag.matchwild('*POSITION') then 
+			!pickAction = 'actionPPointPosition'
+		elseif !tag.matchwild('*DISTANCE') then 
+			!pickAction = 'actionPPointDistance'
+		endif
+
+		-- show central axes
+		!pick = object EDGPACKET()
+		!pick.description = 'vxaPPointPick'
+		!pick.priority    = 1
+		!pick.remove      = false
+		!pick.action 	 = |!!vxaParagonMeasure.$!<pickAction>(!this.return[1])|
+		!pick.close 	 = |!!vxaParagonMeasure.closePick()|
+		!pick.escape   	 = |!!vxaParagonMeasure.escapePick()|
+		!pick.pickPacket.picks[1] = object EDGPICKTYPE()
+		!pick.pickPacket.picks[1].stdElement('')
+		!pick.pickPacket.picks[1].pick.modifiable = false
+		if !pickAction eq  'actionPPointDistance' then 
+			!pick.pickPacket.picks[2] = object EDGPICKTYPE()
+			!pick.pickPacket.picks[2].stdElement('')
+			!pick.pickPacket.picks[2].pick.modifiable = false
+		endif 
+
+		-- -- Add Packet to event system
+		if( !!EDGCntrl.add(!pick).not()) then
+			!!alert.warning('Failed loading event packet (' & !!error.text & ').')
+		endif
+	endif
+endmethod
+
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .actionPPointPosition(!pick is ANY)
+-- 
+-- Description: Standard Method
+-- 
+--				shows the position of a picked point
+--
+-----------------------------------------------------------------------------------------------------
+define method .actionPPointPosition(!pick is ANY)
+
+
+	!ppoint = !pick.item
+	handle any
+		return 
+	endhandle 
+	
+	-- check if it's a ppoint
+	!own = PTSE of $!ppoint
+	handle any 
+		return
+	endhandle 
+
+	if !ppoint.type eq 'PTSE' then
+		!!alert.message(|Can't resolve distance. Have you picked default PPOINT0?|)
+		return
+	endif 
+
+
+	-- get the scom
+	!scom =  !this.form.component
+	handle any
+		$P can't find the SCOM. Select a Component in the Category view? 
+		return
+	endhandle 
+
+	!pnum = !ppoint.number
+
+	!pos =  P$!<pnum>pos of $!scom
+	handle any
+		return
+	endhandle 
+	
+	!this.tagPoint(!pos)
+endmethod
+
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .actionPPointDistance(!picks is ARRAY)
+-- 
+-- Description: Standard Method
+-- 
+--				measures the distance between two ppoints
+--
+-----------------------------------------------------------------------------------------------------
+define method .actionPPointDistance(!picks is ARRAY)
+
+	-- get the scom
+	!scom =  !this.form.component
+	handle any
+		$P can't find the SCOM. Select a Component in the Category view? 
+		return
+	endhandle 
+
+	!poss = object ARRAY()
+
+	do !pick values !picks
+		!ppoint = !pick.item
+		handle any
+			return 
+		endhandle 
+		
+		-- check if it's a ppoint
+		!own = PTSE of $!ppoint
+		handle any 
+			return
+		endhandle 
+
+		if !ppoint.type eq 'PTSE' then
+			!!alert.message(|Can't resolve distance. Have you picked default PPOINT0?|)
+			return
+		endif 
+
+		!pnum = !ppoint.number
+
+		!pos =  P$!<pnum>pos of $!scom
+		handle any
+			return
+		endhandle 
+
+		!poss.append(!pos)
+	enddo 
+
+	!this.tagDistance(!poss)
+endmethod
+
+define method .closePick()
+	--
+endmethod
+define method .escapePick()
+	--
+endmethod
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .tagPoint(!pos is POSITION)
+-- 
+-- Description: Standard Method
+-- 
+--				shows the position of a picked point
+--
+-----------------------------------------------------------------------------------------------------
+define method .tagPoint(!pos is POSITION)
+
+	if !pos.unset() then 
+		$P Pick Position Unset
+		return 
+	endif 
+
+	!fmt = object FORMAT()
+	!fmt.dp = 1
+
+	aid sphere number $!this.vxAid $!pos dia 3
+
+	!X = !pos.East.abs()
+	!Y = !pos.North.abs()
+	!Z = !pos.Up.abs()
+
+	!arrowCoeff = 3
+
+	!Ori = object Orientation('Y is Y and Z is Z')
+	
+	-- X 
+	!posX0 = object POSITION (!pos.string())
+	!posX0.East  = 0
+
+	!lineX = object LINE (!pos, !posX0)
+	!tX = !pos.East.string(!fmt)
+	if !X neq 0 then 
+
+		!xDir = !lineX.direction()
+		!xDirO = !xDir.opposite()
+		!propX = !arrowCoeff / !X
+
+		aid arrow num $!this.vxAid  AT $!pos DIR $!xDir HEI $!X prop $!propX
+		aid arrow num $!this.vxAid  AT $!posX0 DIR $!xDirO HEI $!X prop $!propX
+
+		!posTX = !lineX.proportion(0.5)
+		aid text number $!this.vxAid  'X=$!<tX> ' at $!posTX
+	endif 
+	
+	-- Y
+	!posY0 = object POSITION (!pos.string())
+	!posY0.North  = 0
+	!lineY = object LINE (!pos, !posY0)
+	!tY = !pos.North.string(!fmt)
+	if !Y neq 0 then 
+
+		!yDir = !lineY.direction()
+		!yDirO = !yDir.opposite()
+		!propY = !arrowCoeff / !Y
+
+		aid arrow num $!this.vxAid  AT $!pos DIR $!yDir HEI $!Y prop $!propY
+		aid arrow num $!this.vxAid  AT $!posY0 DIR $!yDirO HEI $!Y prop  $!propY
+	
+		!posTY = object POSITION (!pos.string())
+		!posTY.North  = !pos.North / 2
+		
+		aid text number $!this.vxAid  'Y=$!<tY> ' at $!posTY
+	endif
+	-- Z
+	!posZ0 = object POSITION (!pos.string())
+	!posZ0.Up  = 0
+	!lineZ = object LINE (!pos, !posZ0)
+	!tZ = !pos.Up.string(!fmt)
+	if !Z neq 0 then 
+
+		!zDir = !lineZ.direction()
+		!zDirO = !zDir.opposite()
+		!propZ = !arrowCoeff / !Z
+
+		aid arrow num $!this.vxAid  AT $!pos DIR $!zDir HEI $!Z prop $!propZ
+		aid arrow num $!this.vxAid  AT $!posZ0 DIR $!zDirO HEI $!Z prop $!propZ
+
+		!posTZ = object POSITION (!pos.string())
+		!posTZ.Up  = !pos.Up / 2
+		
+		aid text number $!this.vxAid  'Z=$!<tZ> ' at $!posTZ
+	endif
+	$P X=$!<tX> Y=$!<tY> Z=$!<tZ> 
+	handle any
+		$P Distances can't be output. 
+	endhandle 
+endmethod
+
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .tagDistance(!poss is ARRAY)
+-- 
+-- Description: Standard Method
+-- 
+--				shows the distance between points
+--
+-----------------------------------------------------------------------------------------------------
+define method .tagDistance(!poss is ARRAY)
+
+	if !poss.unset() then 
+		$P Pick Position Unset
+		return 
+	endif 
+	if !poss.size() neq 2 then 
+		$P Pick Positions Wrong
+		return 
+	endif
+
+	!pos1 = !poss.first() 
+	!pos2 = !poss.last()
+
+	if !pos1.up gt !pos2.up then 
+		!pos1 = !poss.last() 
+		!pos2 = !poss.first() 
+	endif 
+
+	-- pos1 - lower point
+	-- pos2 - higher point
+	-- pos3 - !pos1 at pos2 height
+	!pos3 = object POSITION (!pos1.string())
+	!pos3.up = !pos2.up
+	-- pos4 - !pos2 at pos1 x
+
+	!pos4 = object POSITION (!pos2.string())
+	!pos4.East = !pos1.East
+
+	!fmt = object FORMAT()
+	!fmt.dp = 1
+
+	aid sphere number $!this.vxAid $!pos1 dia 3
+	aid sphere number $!this.vxAid $!pos2 dia 3
+
+	!arrowCoeff = 3
+
+	-- X - from pos2 to pos4
+	!lineX = object LINE (!pos2, !pos4)
+	!X = !lineX.length() 
+	!tX = !X.string(!fmt)
+	if !X neq 0 then 
+
+		!xDir = !lineX.direction()
+		!xDirO = !xDir.opposite()
+		!propX = !arrowCoeff / !X
+		
+		aid arrow num $!this.vxAid  AT $!pos2 DIR $!xDir HEI $!X prop $!propX
+		aid arrow num $!this.vxAid  AT $!pos4 DIR $!xDirO HEI $!X prop $!propX
+
+		!posTX = !lineX.proportion(0.5)
+		aid text number $!this.vxAid  'X=$!<tX> ' at $!posTX
+	endif
+
+	-- Y - from pos 3 to pos 3
+	!lineY = object LINE (!pos3, !pos4)
+	!Y = !lineY.length()
+	!tY = !Y.string(!fmt)
+	if !Y neq 0 then 
+		!yDir = !lineY.direction()
+		!yDirO = !yDir.opposite()
+
+		!propY = !arrowCoeff / !Y
+
+		aid arrow num $!this.vxAid  AT $!pos4 DIR $!yDirO HEI $!Y prop  $!propY
+		aid arrow num $!this.vxAid  AT $!pos3 DIR $!yDir HEI $!Y prop  $!propY
+
+		!posTY = !lineY.proportion(0.5)	
+		aid text number $!this.vxAid  'Y=$!<tY> ' at $!posTY
+	endif 
+
+
+	-- Z - from pos1 to pos3
+	!lineZ = object LINE (!pos3, !pos1)
+	!Z = !lineZ.length()
+	!tZ = !Z.string(!fmt)
+	if !Z neq 0 then 
+		!zDir = !lineZ.direction()
+		!zDirO = !zDir.opposite()
+		!propZ = !arrowCoeff / !Z
+
+		aid arrow num $!this.vxAid  AT $!pos3 DIR $!zDir HEI $!Z prop $!propZ
+		aid arrow num $!this.vxAid  AT $!pos1 DIR $!zDirO HEI $!Z prop $!propZ
+
+		!posTZ = !lineZ.proportion(0.5)
+		aid text number $!this.vxAid  'Z=$!<tZ> ' at $!posTZ
+	endif
+
+	-- diagonal value - actual p1 to p2 distance
+	!lineD = object LINE (!pos2, !pos1)
+	!D = !lineD.length()
+	!tD = !D.string(!fmt)
+	if !D neq 0 then
+		!dDir = !lineD.direction()
+		!dDirO = !dDir.opposite()
+		!propD = !arrowCoeff / !D
+
+		aid arrow num $!this.vxAid  AT $!pos2 DIR $!dDir HEI $!D prop $!propD
+		aid arrow num $!this.vxAid  AT $!pos1 DIR $!dDirO HEI $!D prop $!propD
+
+		!posTD = !lineD.proportion(0.5)
+		aid text number $!this.vxAid  'D=$!<tD> ' at $!posTD
+	endif
+	$P X=$!<tX> Y=$!<tY> Z=$!<tZ> D=$!<tD>
+	handle any
+		$P Distances can't be output. 
+	endhandle 
+endmethod
+
+
+--- FORM METHODS
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .start()
+--
+-- Description: Start Method
+--
+-----------------------------------------------------------------------------------------------------
+define method .start ()
+	if (!this.shown()) then
+		!this.exit()
+		return
+	endif
+
+	!this.init()
+	!this.Show ('CEN',0.5,0.5)	
+endmethod
+
+
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .quitCall
+--
+-- Description: Quit Call Method - Runs when a user closes the form with the red cross
+--
+-----------------------------------------------------------------------------------------------------
+define method .quitCall()
+endmethod
+
+
+-----------------------------------------------------------------------------------------------------
+--
+-- Method:      .exit
+--
+-- Description: Killing Call Method - Runs when the form is unloaded from PDMS
+--
+-----------------------------------------------------------------------------------------------------
+define method .exit()
+	aid clear all
+	!!EDGCntrl.escape()
+	-- cleanup the used views. 
+	do !view values !this.views
+		!!EDGCntrl.removeView(!view)
+	enddo
+	!this.hide()
+endmethod
+
+-----------------------------------------------------------------------------------------------------
+--
+
+--
+-----------------------------------------------------------------------------------------------------
+define method .info()
+	!p =  !!edgPosCntrl.PickIndex
+	$P   !!edgPosCntrl.PickIndex $!p
+	!p =  !!edgPosCntrl.PickTypeIndex
+	$P   !!edgPosCntrl.PickTypeIndex $!p
+endmethod
+
